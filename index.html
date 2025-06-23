@@ -40,6 +40,45 @@
       #loader {
         display: none;
       }
+      #rekapArea {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-top: 2rem;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+      }
+
+      #rekapArea h5 {
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #0d6efd;
+      }
+
+      #rekapTableBody tr:nth-child(odd) {
+        background-color: #ffffff;
+      }
+
+      #rekapTableBody tr:nth-child(even) {
+        background-color: #f1f3f5;
+      }
+
+      #rekapArea th {
+        background-color: #0d6efd;
+        color: #fff;
+        text-align: center;
+        vertical-align: middle;
+      }
+
+      #rekapArea td {
+        text-align: center;
+        vertical-align: middle;
+        font-size: 14px;
+      }
+      table.table th,
+      table.table td {
+      font-size: 12px !important;
+      }
+
     </style>
   </head>
   <body>
@@ -82,7 +121,23 @@
           >Template</a
         >
       </div>
-    </div>
+      <div id="rekapArea">
+        <h5><i class="bi bi-bar-chart-line-fill me-2"></i>Rekap Deteksi Berdasarkan Usia</h5>
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>&lt; 60 Tahun</th>
+                <th>&ge; 60 Tahun</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="rekapTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      
 
     <!-- Modal Edit -->
     <div class="modal fade" id="editModal" tabindex="-1">
@@ -125,6 +180,7 @@
 
       $(document).ready(() => {
         $("#loader").show();
+
         $.getJSON(scriptURL + "?start=0&length=1", ({ data }) => {
           const sample = data?.[0];
           if (!sample) return alert("Data tidak ditemukan");
@@ -169,7 +225,7 @@
                 extend: "excel",
                 className: "d-none",
                 exportOptions: {
-                  columns: ":not(:first-child)", // ⛔ Jangan export kolom pertama (Aksi)
+                  columns: ":not(:first-child)",
                 },
               },
             ],
@@ -180,10 +236,62 @@
             pageLength: 10,
           });
 
-          $("#exportExcel").click(() =>
-            table.button(".buttons-excel").trigger()
-          );
+          updateRekap(); // Panggil rekap pertama kali
         });
+
+        // Fungsi update rekap deteksi
+        function updateRekap() {
+          const fields = [
+            "DETEKSI_OBESITAS",
+            "DETEKSI_HT",
+            "CHOLESTEROL",
+            "DETEKSI_STROKE",
+            "DETEKSI_JANTUNG",
+            "CA_SERVIX",
+            "CA_MAMAE",
+            "CA_KOLORECTAL",
+            "CA_PARU",
+            "DETEKSI_DM",
+            "SKRINING_PPOK",
+            "SKRINING_GINJAL",
+            "TBC",
+            "MALARIA",
+            "HIV",
+            "HEPATITIS_B",
+            "HEPATITIS_C",
+          ];
+
+          $.getJSON(scriptURL + "?rekap=1", (res) => {
+            const counts = {};
+            fields.forEach((f) => (counts[f] = { kurang60: 0, lebih60: 0 }));
+
+            (res.data || []).forEach((row) => {
+              const usia = parseInt(row["USIA"]) || 0;
+              const kategori = usia >= 60 ? "lebih60" : "kurang60";
+              fields.forEach((f) => {
+                if ((row[f] || "").toUpperCase() === "YA")
+                  counts[f][kategori]++;
+              });
+            });
+
+            const tbody = $("#rekapTableBody").empty();
+            fields.forEach((field) => {
+              const row = counts[field];
+              const total = row.kurang60 + row.lebih60;
+              tbody.append(`
+                  <tr>
+                    <td>${field.replaceAll("_", " ")}</td>
+                    <td>${row.kurang60}</td>
+                    <td>${row.lebih60}</td>
+                    <td>${total}</td>
+                  </tr>
+                `);
+            });
+          });
+        }
+
+        // Export Excel
+        $("#exportExcel").click(() => table.button(".buttons-excel").trigger());
 
         // Edit Button
         $(document).on("click", ".editBtn", function () {
@@ -216,18 +324,18 @@
 
             if (yaTidak.includes(key)) {
               input = `
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="${key}" value="Ya" ${
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="${key}" value="Ya" ${
                 val === "Ya" ? "checked" : ""
               }>
-                <label class="form-check-label">Ya</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="${key}" value="Tidak" ${
+                    <label class="form-check-label">Ya</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="${key}" value="Tidak" ${
                 val === "Tidak" ? "checked" : ""
               }>
-                <label class="form-check-label">Tidak</label>
-              </div>`;
+                    <label class="form-check-label">Tidak</label>
+                  </div>`;
             } else {
               const readonly = [
                 "IMT",
@@ -243,54 +351,50 @@
             }
 
             form.append(`
-            <div class="row mb-3 align-items-center">
-              <label class="col-sm-4 col-form-label">${key.replaceAll(
-                "_",
-                " "
-              )}</label>
-              <div class="col-sm-8">${input}</div>
-            </div>`);
+                <div class="row mb-3 align-items-center">
+                  <label class="col-sm-4 col-form-label">${key.replaceAll(
+                    "_",
+                    " "
+                  )}</label>
+                  <div class="col-sm-8">${input}</div>
+                </div>`);
           });
 
           new bootstrap.Modal("#editModal").show();
         });
 
-        $("#saveBtn").click(function () {
-            const $btn = $(this);
-            const originalText = $btn.html();
-          
-            $btn.prop("disabled", true).html(
-              `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Menyimpan...`
-            );
-          
-            const data = Object.fromEntries(new FormData(document.getElementById("editForm")).entries());
-            data.action = "edit";
-            data.index = currentIndex;
-          
-            $("#loader").show();
-          
-            fetch(scriptURL, {
-              method: "POST",
-              body: new URLSearchParams(data)
+        // Save Edit
+        $("#saveBtn").click(() => {
+          const data = Object.fromEntries(
+            new FormData(document.getElementById("editForm")).entries()
+          );
+          data.action = "edit";
+          data.index = currentIndex;
+
+          $("#loader").show();
+
+          fetch(scriptURL, {
+            method: "POST",
+            body: new URLSearchParams(data),
+          })
+            .then((res) => res.json())
+            .then((res) => {
+              $("#loader").hide();
+              if (res.success) {
+                bootstrap.Modal.getInstance(
+                  document.getElementById("editModal")
+                ).hide();
+                table.ajax.reload(null, false);
+                updateRekap();
+              } else {
+                alert("Gagal: " + res.message);
+              }
             })
-              .then(res => res.json())
-              .then(res => {
-                $("#loader").hide();
-                $btn.prop("disabled", false).html(originalText);
-          
-                if (res.success) {
-                  bootstrap.Modal.getInstance(document.getElementById("editModal")).hide();
-                  table.ajax.reload(null, false);
-                } else {
-                  alert("Gagal: " + res.message);
-                }
-              })
-              .catch(err => {
-                $("#loader").hide();
-                $btn.prop("disabled", false).html(originalText);
-                alert("Error: " + err.toString());
-              });
-          });
+            .catch((err) => {
+              $("#loader").hide();
+              alert("Error: " + err.toString());
+            });
+        });
 
         // Import Excel
         $("#importBtn").click(() => $("#excelFile").click());
@@ -320,7 +424,7 @@
               if (i >= data.length) {
                 $("#loader").hide();
                 alert(`Import selesai\nBerhasil: ${ok}\nGagal: ${fail}`);
-                return table.ajax.reload();
+                return table.ajax.reload(() => updateRekap());
               }
               const row = { ...data[i++], action: "add" };
               fetch(scriptURL, {
