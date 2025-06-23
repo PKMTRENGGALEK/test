@@ -255,36 +255,42 @@
           new bootstrap.Modal("#editModal").show();
         });
 
-        $("#saveBtn").click(() => {
-          const data = Object.fromEntries(
-            new FormData(document.getElementById("editForm")).entries()
-          );
-          data.action = "edit";
-          data.index = currentIndex;
-
-          $("#loader").show();
-
-          fetch(scriptURL, {
-            method: "POST",
-            body: new URLSearchParams(data),
-          })
-            .then((res) => res.json())
-            .then((res) => {
-              $("#loader").hide();
-              if (res.success) {
-                bootstrap.Modal.getInstance(
-                  document.getElementById("editModal")
-                ).hide();
-                table.ajax.reload(null, false);
-              } else {
-                alert("Gagal: " + res.message);
-              }
+        $("#saveBtn").click(function () {
+            const $btn = $(this);
+            const originalText = $btn.html();
+          
+            $btn.prop("disabled", true).html(
+              `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Menyimpan...`
+            );
+          
+            const data = Object.fromEntries(new FormData(document.getElementById("editForm")).entries());
+            data.action = "edit";
+            data.index = currentIndex;
+          
+            $("#loader").show();
+          
+            fetch(scriptURL, {
+              method: "POST",
+              body: new URLSearchParams(data)
             })
-            .catch((err) => {
-              $("#loader").hide();
-              alert("Error: " + err.toString());
-            });
-        });
+              .then(res => res.json())
+              .then(res => {
+                $("#loader").hide();
+                $btn.prop("disabled", false).html(originalText);
+          
+                if (res.success) {
+                  bootstrap.Modal.getInstance(document.getElementById("editModal")).hide();
+                  table.ajax.reload(null, false);
+                } else {
+                  alert("Gagal: " + res.message);
+                }
+              })
+              .catch(err => {
+                $("#loader").hide();
+                $btn.prop("disabled", false).html(originalText);
+                alert("Error: " + err.toString());
+              });
+          });
 
         // Import Excel
         $("#importBtn").click(() => $("#excelFile").click());
