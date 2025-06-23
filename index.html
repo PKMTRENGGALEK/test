@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Data Skrining Kesehatan</title>
+
+    <!-- Bootstrap, DataTables, Bootstrap Icons -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+
+    <style>
+      div.dataTables_processing {
+        z-index: 1050 !important;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.9);
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        font-weight: bold;
+        color: #0d6efd;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      #loader {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container my-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Data Skrining Kesehatan</h4>
+        <div class="d-flex gap-2">
+          <input
+            type="file"
+            id="excelFile"
+            accept=".xlsx, .xls"
+            class="d-none"
+          />
+          <button class="btn btn-secondary" id="importBtn">Import</button>
+          <button class="btn btn-success" id="exportExcel">Export</button>
+        </div>
+      </div>
+
+      <div id="loader" class="text-center mb-3">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table
+          id="skriningTable"
+          class="table table-bordered table-striped table-sm w-100"
+        >
+          <thead>
+            <tr></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div>
+        <a
+          href="template.xlsx"
+          class="btn btn-sm btn-outline-danger shadow mt-2"
+          >Template</a
+        >
+      </div>
+    </div>
+
+    <!-- Modal Edit -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title">Edit Data Skrining</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body"><form id="editForm"></form></div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">
+              Batal
+            </button>
+            <button class="btn btn-primary" id="saveBtn">Simpan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+      const scriptURL =
+        "https://script.google.com/macros/s/AKfycbyXhwt_GVgXA2d7ayggRwczO-ka7EvLorDt56BgX7TYUxiiI1_S34gH0w-WZHuZrbw/exec";
+      let table, currentIndex;
+
+      $(document).ready(() => {
+        $("#loader").show();
+        $.getJSON(scriptURL + "?start=0&length=1", ({ data }) => {
+          const sample = data?.[0];
+          if (!sample) return alert("Data tidak ditemukan");
+
+          const header = $("#skriningTable thead tr")
+            .empty()
+            .append("<th>Aksi</th>");
+          const columns = [
+            {
+              data: null,
+              orderable: false,
+              render: (d, t, r) =>
+                `<button class='btn btn-sm btn-outline-primary editBtn' data-index='${
+                  r.No - 1
+                }'><i class="bi bi-gear"></i></button>`,
+            },
+          ];
+
+          for (const key in sample) {
+            if (key === "No") continue;
+            header.append(`<th>${key}</th>`);
+            columns.push({ data: key });
+          }
+
+          table = $("#skriningTable").DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: (data, cb) => {
+              $.getJSON(
+                scriptURL,
+                { start: data.start, length: data.length },
+                (res) => {
+                  $("#loader").hide();
+                  cb({ draw: data.draw, ...res });
+                }
+              );
+            },
+            columns,
+            dom: "Bfrtip",
+            buttons: [
+              {
+                extend: "excel",
+                className: "d-none",
+                exportOptions: {
+                  columns: ":not(:first-child)", // ⛔ Jangan export kolom pertama (Aksi)
+                },
+              },
+            ],
+            language: {
+              processing:
+                "<span class='text-primary fw-bold'>Memuat data...</span>",
+            },
+            pageLength: 10,
+          });
+
+          $("#exportExcel").click(() =>
+            table.button(".buttons-excel").trigger()
+          );
+        });
+
+        // Edit Button
+        $(document).on("click", ".editBtn", function () {
+          currentIndex = $(this).data("index");
+          const row = table.row($(this).parents("tr")).data();
+          const form = $("#editForm").empty();
+
+          const yaTidak = [
+            "SKRINING_PPOK",
+            "SKRINING_GINJAL",
+            "SMOKE_ANALIZER",
+            "SKRINING_TALASEMIA",
+            "MASALAH_KULIT_LUAR_PENIS",
+            "MASALAH_SCORTUM",
+            "TBC",
+            "MALARIA",
+            "HIV",
+            "HEPATITIS_B",
+            "HEPATITIS_C",
+            "MATA",
+            "TES_BISIK",
+            "KARIES",
+            "PENYAKIT_MULUT",
+            "NARKOBA",
+          ];
+
+          Object.entries(row).forEach(([key, val]) => {
+            if (key === "No") return;
+            let input = "";
+
+            if (yaTidak.includes(key)) {
+              input = `
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="${key}" value="Ya" ${
+                val === "Ya" ? "checked" : ""
+              }>
+                <label class="form-check-label">Ya</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="${key}" value="Tidak" ${
+                val === "Tidak" ? "checked" : ""
+              }>
+                <label class="form-check-label">Tidak</label>
+              </div>`;
+            } else {
+              const readonly = [
+                "IMT",
+                "DETEKSI_HT",
+                "CHOLESTEROL",
+                "DETEKSI_STROKE",
+              ].includes(key)
+                ? "readonly"
+                : "";
+              input = `<input class="form-control" name="${key}" value="${
+                val || ""
+              }" ${readonly}>`;
+            }
+
+            form.append(`
+            <div class="row mb-3 align-items-center">
+              <label class="col-sm-4 col-form-label">${key.replaceAll(
+                "_",
+                " "
+              )}</label>
+              <div class="col-sm-8">${input}</div>
+            </div>`);
+          });
+
+          new bootstrap.Modal("#editModal").show();
+        });
+
+        $("#saveBtn").click(() => {
+          const data = Object.fromEntries(
+            new FormData(document.getElementById("editForm")).entries()
+          );
+          data.action = "edit";
+          data.index = currentIndex;
+
+          $("#loader").show();
+
+          fetch(scriptURL, {
+            method: "POST",
+            body: new URLSearchParams(data),
+          })
+            .then((res) => res.json())
+            .then((res) => {
+              $("#loader").hide();
+              if (res.success) {
+                bootstrap.Modal.getInstance(
+                  document.getElementById("editModal")
+                ).hide();
+                table.ajax.reload(null, false);
+              } else {
+                alert("Gagal: " + res.message);
+              }
+            })
+            .catch((err) => {
+              $("#loader").hide();
+              alert("Error: " + err.toString());
+            });
+        });
+
+        // Import Excel
+        $("#importBtn").click(() => $("#excelFile").click());
+
+        $("#excelFile").on("change", function (e) {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          $("#loader").show();
+
+          const reader = new FileReader();
+          reader.onload = function (evt) {
+            const workbook = XLSX.read(new Uint8Array(evt.target.result), {
+              type: "array",
+            });
+            const data = XLSX.utils.sheet_to_json(
+              workbook.Sheets[workbook.SheetNames[0]],
+              { defval: "" }
+            );
+
+            if (!data.length) return alert("File kosong atau format salah");
+
+            let i = 0,
+              ok = 0,
+              fail = 0;
+            const upload = () => {
+              if (i >= data.length) {
+                $("#loader").hide();
+                alert(`Import selesai\nBerhasil: ${ok}\nGagal: ${fail}`);
+                return table.ajax.reload();
+              }
+              const row = { ...data[i++], action: "add" };
+              fetch(scriptURL, {
+                method: "POST",
+                body: new URLSearchParams(row),
+              })
+                .then((res) => res.json())
+                .then((res) => {
+                  res.success ? ok++ : fail++;
+                  upload();
+                })
+                .catch(() => {
+                  fail++;
+                  upload();
+                });
+            };
+            upload();
+          };
+          reader.readAsArrayBuffer(file);
+        });
+      });
+    </script>
+  </body>
+</html>
